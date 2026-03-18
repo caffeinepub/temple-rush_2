@@ -1,0 +1,124 @@
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "BricolageGrotesque";
+  src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    /* Deep jungle dark theme */
+    --background: 0.09 0.018 200;
+    --foreground: 0.97 0.005 200;
+    --card: 0.13 0.02 200;
+    --card-foreground: 0.97 0.005 200;
+    --popover: 0.16 0.022 200;
+    --popover-foreground: 0.97 0.005 200;
+    /* Gold primary */
+    --primary: 0.75 0.14 72;
+    --primary-foreground: 0.09 0.018 200;
+    /* Dark secondary */
+    --secondary: 0.2 0.02 200;
+    --secondary-foreground: 0.83 0.012 200;
+    --muted: 0.18 0.018 200;
+    --muted-foreground: 0.56 0.01 200;
+    /* Orange accent */
+    --accent: 0.65 0.18 50;
+    --accent-foreground: 0.09 0.018 200;
+    --destructive: 0.58 0.22 25;
+    --destructive-foreground: 0.97 0.005 200;
+    --border: 0.22 0.018 200;
+    --input: 0.22 0.018 200;
+    --ring: 0.75 0.14 72;
+    --chart-1: 0.75 0.14 72;
+    --chart-2: 0.65 0.18 50;
+    --chart-3: 0.6 0.12 185;
+    --chart-4: 0.5 0.1 200;
+    --chart-5: 0.4 0.07 220;
+    --sidebar: 0.13 0.02 200;
+    --sidebar-foreground: 0.97 0.005 200;
+    --sidebar-primary: 0.75 0.14 72;
+    --sidebar-primary-foreground: 0.09 0.018 200;
+    --sidebar-accent: 0.2 0.02 200;
+    --sidebar-accent-foreground: 0.83 0.012 200;
+    --sidebar-border: 0.22 0.018 200;
+    --sidebar-ring: 0.75 0.14 72;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Montserrat", sans-serif;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+}
+
+/* Gold gradient text utility */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #ffb347 0%, #e7771e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gold CTA button */
+.btn-gold {
+  background: linear-gradient(135deg, #ffb347 0%, #e7771e 100%);
+  color: #0b1416;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 9999px;
+  box-shadow: 0 0 24px rgba(255, 152, 50, 0.4), 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 0.2s, transform 0.1s;
+}
+
+.btn-gold:hover {
+  box-shadow: 0 0 36px rgba(255, 152, 50, 0.6), 0 6px 20px rgba(0, 0, 0, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-gold:active {
+  transform: translateY(0);
+}
+
+/* HUD text shadow */
+.hud-score {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 152, 50, 0.3);
+}
+
+/* Touch button */
+.touch-btn {
+  background: rgba(11, 20, 22, 0.7);
+  border: 2px solid rgba(255, 152, 50, 0.5);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  color: #ffb347;
+  font-size: 1.5rem;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.touch-btn:active {
+  background: rgba(231, 119, 30, 0.3);
+  border-color: rgba(255, 179, 71, 0.9);
+}
