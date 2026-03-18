@@ -1,24 +1,28 @@
 # Temple Rush
 
 ## Current State
-Endless runner game with a hunter character, stone path tiles, river on the left, trees, coins, holes, and boost zones. Morning sky background with fog.
+Endless runner with stone path tiles, holes, boost zones, rockfall obstacles, waterfall visuals, buildings, city skyline, and a 25-year-old hunter character.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Waterfall: a cascading water effect positioned between the path and the river (left side of path, around x=-7 to x=-8), with animated blue-white cascading water mesh and mist/foam at the base
-- Rockfall: falling rocks that descend from above as an obstacle — rocks spawn at height, fall down, and the player must jump/dodge them; they appear on specific lanes
-- Buildings: tall building silhouettes visible in the distant background (far z), adding urban backdrop depth
-- City: city skyline elements (multiple building shapes at varying heights) rendered far in the background, giving the environment a cityscape feel
+- Broken bridge obstacle zone: two intact stone platform ends with a wide gap in the center
+- Tilted/crumbling wooden plank visuals at both edges of the gap
+- Rope posts (4 tall posts flanking the gap) with sagging rope lines connecting them across the gap
+- Below the gap: cascading waterfall planes animated downward
+- Below the gap: rocks scattered / falling in the chasm
+- Full-width gap collision (player must jump to cross; falling in triggers game over)
 
 ### Modify
-- GameScene.tsx: add waterfall geometry near river, add rockfall obstacle system (spawn, animate, collision), add background city/building meshes
+- GameScene.tsx: add BRIDGE_POOL, BridgeData interface, bridgeGroupRefs, spawn/update/collision logic, and bridge JSX
 
 ### Remove
-- Nothing
+- Nothing removed
 
 ## Implementation Plan
-1. Add a static waterfall group positioned between path and river (x ~ -7.5, animated with shifting UV or emissive pulse on water planes)
-2. Add ROCK_POOL of falling rock instances — spawn at wz ahead of player at random lanes, start high y, fall down each frame, player collides if close enough at ground level
-3. Add nextRockFallWZRef and spawnRockFall function
-4. Add city/building background: array of box meshes at far x positions (both sides) and high z offsets, scrolling slowly for parallax, various heights and widths with dark silhouette material
+1. Add BRIDGE_POOL=4 constant and BridgeData interface
+2. Add bridgeDataRef, bridgeGroupRefs array refs, nextBridgeWZRef
+3. Add spawnBridge() helper
+4. In useFrame: spawn bridges at intervals, update group z positions, collision detection (full-width, py < 0.25)
+5. Reset bridge state on gameState change to running
+6. Add bridge JSX pool: left/right platform, broken tilted planks, rope posts, sagging rope segments (5 segments per rope, 3 ropes), waterfall planes below gap, fallen rocks in chasm

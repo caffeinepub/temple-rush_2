@@ -13,7 +13,10 @@ const COIN_POOL = 40;
 const HOLE_POOL = 20;
 const BOOST_POOL = 10;
 const ROCK_POOL = 15;
-const JUMP_VELOCITY = 10;
+const BRIDGE_POOL = 4;
+const BRIDGE_GAP_HALF = 4.0;
+const BRIDGE_PLAT_LEN = 8;
+const JUMP_VELOCITY = 16;
 const GRAVITY = 22;
 const INITIAL_SPEED = 16;
 const MAX_SPEED = 50;
@@ -21,6 +24,10 @@ const SPEED_RAMP = 1.2;
 const BOOST_MULTIPLIER = 1.5;
 const BOOST_DURATION = 3.0;
 const TILE_KEYS = Array.from({ length: TILE_COUNT }, (_, i) => `tile-${i}`);
+const BRIDGE_KEYS = Array.from(
+  { length: BRIDGE_POOL },
+  (_, i) => `bridge-slot-${i}`,
+);
 const BUILDING_COUNT_PER_SIDE = 8;
 const BUILDING_CYCLE = 200;
 const WATERFALL_ZS = [30, 110, 190, 270] as const;
@@ -63,6 +70,11 @@ interface RockData {
   landedTimer: number;
 }
 
+interface BridgeData {
+  wz: number;
+  active: boolean;
+}
+
 interface Props {
   gameState: GameState;
   controlsRef: React.MutableRefObject<GameControls | null>;
@@ -76,7 +88,7 @@ const _tq = new THREE.Quaternion();
 const _ts = new THREE.Vector3(1, 1, 1);
 const _offMatrix = new THREE.Matrix4().makeTranslation(0, -1000, 0);
 const _euler = new THREE.Euler();
-const _holeScale = new THREE.Vector3(1.4, 1, 4);
+const _holeScale = new THREE.Vector3(2.5, 1, 10);
 const _boostScale = new THREE.Vector3(TILE_WIDTH, 1, 6);
 const _identityQ = new THREE.Quaternion();
 const _rockScale = new THREE.Vector3(1, 1, 1);
@@ -227,6 +239,7 @@ export function GameScene({
   const nextHoleWZRef = useRef(80);
   const nextBoostWZRef = useRef(150);
   const nextRockWZRef = useRef(120);
+  const nextBridgeWZRef = useRef(200);
   const boostTimeRef = useRef(0);
   const baseSpeedRef = useRef(INITIAL_SPEED);
   const cameraXRef = useRef(0);
@@ -269,6 +282,9 @@ export function GameScene({
       landedTimer: 0,
     })),
   );
+  const bridgeDataRef = useRef<BridgeData[]>(
+    Array.from({ length: BRIDGE_POOL }, () => ({ wz: -1000, active: false })),
+  );
 
   const playerGroupRef = useRef<THREE.Group>(null!);
   const playerMeshRef = useRef<THREE.Group>(null!);
@@ -285,6 +301,9 @@ export function GameScene({
   const holeInstanceRef = useRef<THREE.InstancedMesh>(null!);
   const boostInstanceRef = useRef<THREE.InstancedMesh>(null!);
   const rockInstanceRef = useRef<THREE.InstancedMesh>(null!);
+  const bridgeGroupRefs = useRef<Array<THREE.Group | null>>(
+    Array(BRIDGE_POOL).fill(null),
+  );
 
   // Waterfall animation refs — 3 planes, each with its own mesh ref
   const wfPlane0Ref = useRef<THREE.Mesh>(null!);
@@ -336,6 +355,7 @@ export function GameScene({
       nextHoleWZRef.current = 80;
       nextBoostWZRef.current = 150;
       nextRockWZRef.current = 120;
+      nextBridgeWZRef.current = 200;
       cameraXRef.current = 0;
       lastScoreReportRef.current = 0;
 
@@ -368,6 +388,14 @@ export function GameScene({
         r.fallY = 8;
         r.landed = false;
         r.landedTimer = 0;
+      }
+      for (const b of bridgeDataRef.current) {
+        b.active = false;
+        b.wz = -1000;
+      }
+      for (let i = 0; i < BRIDGE_POOL; i++) {
+        const g = bridgeGroupRefs.current[i];
+        if (g) g.position.z = -1000;
       }
 
       if (coinInstanceRef.current) {
@@ -452,6 +480,11 @@ export function GameScene({
         landedTimer: 0,
       };
     }
+  };
+
+  const spawnBridge = (wz: number) => {
+    const slot = bridgeDataRef.current.findIndex((b) => !b.active);
+    if (slot >= 0) bridgeDataRef.current[slot] = { wz, active: true };
   };
 
   useFrame((state, delta) => {
@@ -558,6 +591,39 @@ export function GameScene({
     while (wo + 220 > nextRockWZRef.current) {
       spawnRock(nextRockWZRef.current);
       nextRockWZRef.current += 35 + Math.random() * 25;
+    }
+    // Bridge spawning
+    while (wo + 250 > nextBridgeWZRef.current) {
+      spawnBridge(nextBridgeWZRef.current);
+      nextBridgeWZRef.current += 180 + Math.random() * 80;
+    }
+    // Update bridge group positions
+    for (let i = 0; i < BRIDGE_POOL; i++) {
+      const b = bridgeDataRef.current[i];
+      const g = bridgeGroupRefs.current[i];
+      if (!g) continue;
+      if (!b.active) {
+        g.position.z = -1000;
+        continue;
+      }
+      const sz = b.wz - wo;
+      if (sz < -(BRIDGE_PLAT_LEN + BRIDGE_GAP_HALF + 12)) {
+        b.active = false;
+        g.position.z = -1000;
+      } else {
+        g.position.z = sz;
+      }
+    }
+    // Bridge gap collision — full width, player must jump
+    for (let i = 0; i < BRIDGE_POOL; i++) {
+      const b = bridgeDataRef.current[i];
+      if (!b.active) continue;
+      const sz = b.wz - wo;
+      const py = playerYRef.current;
+      if (Math.abs(sz) < BRIDGE_GAP_HALF - 0.5 && py < 0.25) {
+        cbRef.current.onGameOver(scoreRef.current, coinsCountRef.current);
+        return;
+      }
     }
 
     if (coinInstanceRef.current) {
@@ -697,8 +763,8 @@ export function GameScene({
       if (!h.active) continue;
       const hz = h.wz - wo;
       if (
-        Math.abs(LANE_X[h.lane] - px) < 0.65 &&
-        Math.abs(hz) < 1.8 &&
+        Math.abs(LANE_X[h.lane] - px) < 1.1 &&
+        Math.abs(hz) < 4.5 &&
         py < 0.3
       ) {
         cbRef.current.onGameOver(scoreRef.current, coinsCountRef.current);
@@ -781,6 +847,42 @@ export function GameScene({
       );
     }
     return items;
+  };
+
+  // Sagging rope segments spanning the bridge gap
+  const ropeSegs = (rx: number, sag = 1.4): React.ReactElement[] => {
+    const segs: React.ReactElement[] = [];
+    const n = 6;
+    const z1 = -BRIDGE_GAP_HALF - 0.3;
+    const z2 = BRIDGE_GAP_HALF + 0.3;
+    const total = z2 - z1;
+    const postH = 2.2;
+    for (let s = 0; s < n; s++) {
+      const t0 = s / n;
+      const t1 = (s + 1) / n;
+      const tMid = (t0 + t1) / 2;
+      const z0w = z1 + t0 * total;
+      const z1w = z1 + t1 * total;
+      const midZ = z1 + tMid * total;
+      const y0 = postH - sag * 4 * t0 * (1 - t0);
+      const y1 = postH - sag * 4 * t1 * (1 - t1);
+      const midY = (y0 + y1) / 2;
+      const dz = z1w - z0w;
+      const dy = y1 - y0;
+      const len = Math.sqrt(dz * dz + dy * dy);
+      const pitch = Math.atan2(dy, dz);
+      segs.push(
+        <mesh
+          key={`r${rx}-${s}`}
+          position={[rx, midY, midZ]}
+          rotation={[Math.PI / 2 + pitch, 0, 0]}
+        >
+          <cylinderGeometry args={[0.028, 0.028, len, 4]} />
+          <meshStandardMaterial color="#7A5C2A" roughness={0.85} />
+        </mesh>,
+      );
+    }
+    return segs;
   };
 
   return (
@@ -1120,6 +1222,234 @@ export function GameScene({
           metalness={0.08}
         />
       </instancedMesh>
+
+      {/* ── Broken Bridge pool ──────────────────────────────────────────────── */}
+      {BRIDGE_KEYS.map((bridgeKey, i) => (
+        <group
+          key={bridgeKey}
+          ref={(el) => {
+            bridgeGroupRefs.current[i] = el;
+          }}
+          position={[0, 0, -1000]}
+        >
+          {/* Left intact platform */}
+          <mesh
+            position={[0, 0, -(BRIDGE_GAP_HALF + BRIDGE_PLAT_LEN / 2)]}
+            receiveShadow
+          >
+            <boxGeometry args={[TILE_WIDTH, 0.3, BRIDGE_PLAT_LEN]} />
+            <meshStandardMaterial
+              color="#C8B89A"
+              roughness={0.9}
+              metalness={0.02}
+            />
+          </mesh>
+          {/* Right intact platform */}
+          <mesh
+            position={[0, 0, BRIDGE_GAP_HALF + BRIDGE_PLAT_LEN / 2]}
+            receiveShadow
+          >
+            <boxGeometry args={[TILE_WIDTH, 0.3, BRIDGE_PLAT_LEN]} />
+            <meshStandardMaterial
+              color="#C8B89A"
+              roughness={0.9}
+              metalness={0.02}
+            />
+          </mesh>
+
+          {/* Broken planks — left edge, tilted and crumbling */}
+          <mesh
+            position={[0.9, 0.05, -(BRIDGE_GAP_HALF - 1.2)]}
+            rotation={[0.45, 0.12, 0.28]}
+            castShadow
+          >
+            <boxGeometry args={[1.6, 0.16, 2.8]} />
+            <meshStandardMaterial color="#8B6020" roughness={0.95} />
+          </mesh>
+          <mesh
+            position={[-1.1, -0.18, -(BRIDGE_GAP_HALF - 0.6)]}
+            rotation={[-0.35, -0.15, -0.22]}
+            castShadow
+          >
+            <boxGeometry args={[1.3, 0.14, 2.4]} />
+            <meshStandardMaterial color="#7A5010" roughness={0.95} />
+          </mesh>
+          <mesh
+            position={[0.2, -0.3, -(BRIDGE_GAP_HALF - 0.2)]}
+            rotation={[0.6, 0.3, 0.1]}
+            castShadow
+          >
+            <boxGeometry args={[0.8, 0.12, 1.8]} />
+            <meshStandardMaterial color="#6A4508" roughness={0.98} />
+          </mesh>
+
+          {/* Broken planks — right edge */}
+          <mesh
+            position={[-0.9, 0.05, BRIDGE_GAP_HALF - 1.2]}
+            rotation={[-0.45, -0.12, -0.28]}
+            castShadow
+          >
+            <boxGeometry args={[1.6, 0.16, 2.8]} />
+            <meshStandardMaterial color="#8B6020" roughness={0.95} />
+          </mesh>
+          <mesh
+            position={[1.1, -0.18, BRIDGE_GAP_HALF - 0.6]}
+            rotation={[0.35, 0.15, 0.22]}
+            castShadow
+          >
+            <boxGeometry args={[1.3, 0.14, 2.4]} />
+            <meshStandardMaterial color="#7A5010" roughness={0.95} />
+          </mesh>
+          <mesh
+            position={[-0.2, -0.3, BRIDGE_GAP_HALF - 0.2]}
+            rotation={[-0.6, -0.3, -0.1]}
+            castShadow
+          >
+            <boxGeometry args={[0.8, 0.12, 1.8]} />
+            <meshStandardMaterial color="#6A4508" roughness={0.98} />
+          </mesh>
+
+          {/* Rope posts — 4 posts, 2 per side */}
+          <mesh position={[-2.3, 1.1, -(BRIDGE_GAP_HALF + 0.6)]} castShadow>
+            <cylinderGeometry args={[0.1, 0.11, 2.6, 7]} />
+            <meshStandardMaterial color="#5C3A1A" roughness={0.9} />
+          </mesh>
+          <mesh position={[2.3, 1.1, -(BRIDGE_GAP_HALF + 0.6)]} castShadow>
+            <cylinderGeometry args={[0.1, 0.11, 2.6, 7]} />
+            <meshStandardMaterial color="#5C3A1A" roughness={0.9} />
+          </mesh>
+          <mesh position={[-2.3, 1.1, BRIDGE_GAP_HALF + 0.6]} castShadow>
+            <cylinderGeometry args={[0.1, 0.11, 2.6, 7]} />
+            <meshStandardMaterial color="#5C3A1A" roughness={0.9} />
+          </mesh>
+          <mesh position={[2.3, 1.1, BRIDGE_GAP_HALF + 0.6]} castShadow>
+            <cylinderGeometry args={[0.1, 0.11, 2.6, 7]} />
+            <meshStandardMaterial color="#5C3A1A" roughness={0.9} />
+          </mesh>
+
+          {/* Post caps */}
+          {([-2.3, 2.3] as number[]).flatMap((px2) =>
+            ([-(BRIDGE_GAP_HALF + 0.6), BRIDGE_GAP_HALF + 0.6] as number[]).map(
+              (pz2) => (
+                <mesh key={`cap-${px2}-${pz2}`} position={[px2, 2.45, pz2]}>
+                  <boxGeometry args={[0.22, 0.12, 0.22]} />
+                  <meshStandardMaterial color="#4A2C12" roughness={0.85} />
+                </mesh>
+              ),
+            ),
+          )}
+
+          {/* Sagging ropes — left, center, right */}
+          {ropeSegs(-2.3, 1.2)}
+          {ropeSegs(0, 1.8)}
+          {ropeSegs(2.3, 1.2)}
+
+          {/* Under-bridge waterfall — cascading water below gap */}
+          <mesh position={[0, -1.8, 0]} rotation={[0, 0, 0]}>
+            <planeGeometry args={[TILE_WIDTH - 0.4, 5]} />
+            <meshStandardMaterial
+              color="#A8D8F0"
+              emissive="#4AAEE0"
+              emissiveIntensity={0.5}
+              transparent
+              opacity={0.7}
+              roughness={0.08}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh position={[0.3, -2.2, 0.12]} rotation={[0, 0.08, 0]}>
+            <planeGeometry args={[TILE_WIDTH - 1.2, 4]} />
+            <meshStandardMaterial
+              color="#C8E8F8"
+              emissive="#80C8F0"
+              emissiveIntensity={0.55}
+              transparent
+              opacity={0.5}
+              roughness={0.05}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          {/* Mist/foam at bottom of chasm */}
+          <mesh position={[0, -4.4, 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[TILE_WIDTH - 0.5, 3]} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              transparent
+              opacity={0.4}
+              roughness={0.3}
+            />
+          </mesh>
+
+          {/* Rocks falling/resting in the chasm */}
+          <mesh
+            position={[-1.2, -2.8, 0.8]}
+            rotation={[0.4, 0.6, 0.3]}
+            castShadow
+          >
+            <icosahedronGeometry args={[0.32, 0]} />
+            <meshStandardMaterial
+              color="#8B7355"
+              roughness={0.92}
+              metalness={0.08}
+            />
+          </mesh>
+          <mesh
+            position={[1.4, -3.5, -0.6]}
+            rotation={[0.8, 0.2, 1.1]}
+            castShadow
+          >
+            <icosahedronGeometry args={[0.26, 0]} />
+            <meshStandardMaterial
+              color="#7A6345"
+              roughness={0.9}
+              metalness={0.1}
+            />
+          </mesh>
+          <mesh
+            position={[0.3, -4.0, 0.4]}
+            rotation={[1.2, 0.9, 0.5]}
+            castShadow
+          >
+            <icosahedronGeometry args={[0.22, 0]} />
+            <meshStandardMaterial
+              color="#6B5535"
+              roughness={0.95}
+              metalness={0.05}
+            />
+          </mesh>
+          <mesh
+            position={[-0.8, -3.1, -0.9]}
+            rotation={[0.2, 1.4, 0.7]}
+            castShadow
+          >
+            <icosahedronGeometry args={[0.18, 0]} />
+            <meshStandardMaterial
+              color="#9B8365"
+              roughness={0.92}
+              metalness={0.06}
+            />
+          </mesh>
+          {/* Small rock splashes in water */}
+          <mesh position={[0.6, -4.2, 0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.25, 8]} />
+            <meshStandardMaterial
+              color="#DDEEFF"
+              transparent
+              opacity={0.55}
+              roughness={0.1}
+            />
+          </mesh>
+          <mesh position={[-0.5, -4.3, -0.3]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.18, 8]} />
+            <meshStandardMaterial
+              color="#DDEEFF"
+              transparent
+              opacity={0.5}
+              roughness={0.1}
+            />
+          </mesh>
+        </group>
+      ))}
 
       {/* ── Hunter Player — 25 year old ───────────────────────────────────── */}
       <group ref={playerGroupRef} position={[LANE_X[1], 0, 0]}>
